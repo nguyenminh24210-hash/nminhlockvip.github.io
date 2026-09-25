@@ -1,130 +1,98 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>NOVAX Key Manager</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0d0d0d; color: #e0e0e0; font-family: monospace; padding: 20px; }
-  h1 { color: #00ff88; margin-bottom: 20px; }
-  input, button { background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; padding: 8px 12px; border-radius: 4px; font-family: monospace; }
-  button { cursor: pointer; background: #00ff8822; border-color: #00ff88; color: #00ff88; }
-  button:hover { background: #00ff8844; }
-  button.danger { background: #ff000022; border-color: #ff4444; color: #ff4444; }
-  .card { background: #111; border: 1px solid #222; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-  .key-str { color: #00ff88; font-weight: bold; }
-  .expired { color: #ff4444; }
-  .active { color: #00ff88; }
-  #log { color: #888; margin-top: 8px; font-size: 0.85em; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #222; font-size: 0.85em; }
-  th { color: #888; }
-</style>
+  <title>Key Manager</title>
+  <style>
+    body { background: #0d0d0d; color: #e0e0e0; font-family: monospace; padding: 20px; }
+    input, select { background: #1a1a1a; border: 1px solid #333; color: #fff; padding: 8px; margin: 4px; border-radius: 4px; }
+    button { background: #222; border: 1px solid #555; color: #0f0; padding: 8px 16px; cursor: pointer; border-radius: 4px; }
+    button:hover { background: #333; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #333; padding: 8px; text-align: left; font-size: 12px; }
+    th { background: #1a1a1a; }
+    .expired { color: #f44; }
+    .valid { color: #0f0; }
+  </style>
 </head>
 <body>
-<h1>⚡ NOVAX Key Manager</h1>
+  <h2>🔑 KEY SERVER PANEL</h2>
 
-<div class="card">
-  <b>Cấu Hình</b><br><br>
-  <input id="base_url" placeholder="URL Firebase Function" style="width:400px">
-  <input id="admin_token" placeholder="Admin token" type="password" style="width:200px">
-  <button onclick="saveConfig()">Lưu</button>
-</div>
+  <div>
+    <input id="adminToken" type="password" placeholder="Admin Token" />
+    <input id="apiBase" placeholder="Firebase Function URL" value="https://YOUR-PROJECT.cloudfunctions.net" />
+  </div>
 
-<div class="card">
-  <b>Tạo Key</b><br><br>
-  <input id="days" placeholder="Số ngày" value="30" style="width:100px">
-  <input id="note" placeholder="Ghi chú (tùy chọn)" style="width:200px">
-  <button onclick="createKey()">+ Tạo Key</button>
-  <div id="log"></div>
-</div>
+  <hr/>
+  <h3>Tạo Key</h3>
+  <input id="customKey" placeholder="Custom key (để trống = auto)" />
+  <input id="days" type="number" placeholder="Số ngày" value="30" />
+  <input id="note" placeholder="Ghi chú (user)" />
+  <button onclick="createKey()">TẠO KEY</button>
 
-<div class="card">
-  <b>Danh Sách Key</b>
-  <button onclick="loadKeys()" style="margin-left:12px">↻ Làm Mới</button>
-  <br><br>
-  <table>
-    <thead><tr><th>Key</th><th>HWID</th><th>Hết Hạn</th><th>Trạng Thái</th><th>Ghi Chú</th><th>Thao Tác</th></tr></thead>
-    <tbody id="key_table"></tbody>
+  <hr/>
+  <button onclick="listKeys()">🔄 Load danh sách key</button>
+  <table id="keyTable">
+    <thead><tr><th>KEY</th><th>Valid</th><th>Expires</th><th>Note</th><th>Action</th></tr></thead>
+    <tbody id="keyBody"></tbody>
   </table>
-</div>
 
-<script>
-let BASE_URL = localStorage.getItem('base_url') || '';
-let ADMIN_TOKEN = localStorage.getItem('admin_token') || '';
+  <script>
+    function getBase() {
+      return document.getElementById("apiBase").value;
+    }
+    function getToken() {
+      return document.getElementById("adminToken").value;
+    }
 
-document.getElementById('base_url').value = BASE_URL;
-document.getElementById('admin_token').value = ADMIN_TOKEN;
+    async function createKey() {
+      const body = {
+        action: "create",
+        key: document.getElementById("customKey").value || undefined,
+        days: parseInt(document.getElementById("days").value),
+        note: document.getElementById("note").value
+      };
+      const r = await fetch(getBase() + "/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": getToken() },
+        body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      alert(d.success ? "Key: " + d.key : "Error: " + d.error);
+      listKeys();
+    }
 
-function saveConfig() {
-  BASE_URL = document.getElementById('base_url').value.trim();
-  ADMIN_TOKEN = document.getElementById('admin_token').value.trim();
-  localStorage.setItem('base_url', BASE_URL);
-  localStorage.setItem('admin_token', ADMIN_TOKEN);
-  alert('Đã lưu.');
-}
+    async function deleteKey(key) {
+      if (!confirm("Xóa key: " + key + "?")) return;
+      await fetch(getBase() + "/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": getToken() },
+        body: JSON.stringify({ action: "delete", key })
+      });
+      listKeys();
+    }
 
-async function createKey() {
-  const days = document.getElementById('days').value;
-  const note = document.getElementById('note').value;
-  const r = await fetch(`${BASE_URL}/createKey`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': ADMIN_TOKEN },
-    body: JSON.stringify({ days, note })
-  });
-  const d = await r.json();
-  document.getElementById('log').textContent = d.key
-    ? `✓ Đã tạo: ${d.key} | Hết hạn: ${d.expires_at}`
-    : `✗ ${JSON.stringify(d)}`;
-  loadKeys();
-}
-
-async function loadKeys() {
-  const r = await fetch(`${BASE_URL}/listKeys`, {
-    headers: { 'x-admin-token': ADMIN_TOKEN }
-  });
-  const d = await r.json();
-  const tbody = document.getElementById('key_table');
-  tbody.innerHTML = '';
-  for (const k of d.keys || []) {
-    const exp = k.expires_at?._seconds
-      ? new Date(k.expires_at._seconds * 1000).toLocaleDateString('vi-VN')
-      : 'Vĩnh viễn';
-    const isExpired = k.expires_at?._seconds && k.expires_at._seconds * 1000 < Date.now();
-    tbody.innerHTML += `<tr>
-      <td class="key-str">${k.id}</td>
-      <td>${k.hwid || '<i style="color:#555">chưa gắn</i>'}</td>
-      <td class="${isExpired ? 'expired' : ''}">${exp}</td>
-      <td class="${k.active ? 'active' : 'expired'}">${k.active ? '✓ Hoạt động' : '✗ Đã thu hồi'}</td>
-      <td>${k.note || ''}</td>
-      <td>
-        <button onclick="resetHwid('${k.id}')">Reset HWID</button>
-        <button class="danger" onclick="revokeKey('${k.id}')">Thu Hồi</button>
-      </td>
-    </tr>`;
-  }
-}
-
-async function revokeKey(key) {
-  if (!confirm(`Thu hồi ${key}?`)) return;
-  await fetch(`${BASE_URL}/deleteKey`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': ADMIN_TOKEN },
-    body: JSON.stringify({ key })
-  });
-  loadKeys();
-}
-
-async function resetHwid(key) {
-  await fetch(`${BASE_URL}/resetHwid`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': ADMIN_TOKEN },
-    body: JSON.stringify({ key })
-  });
-  loadKeys();
-}
-
-loadKeys();
-</script>
+    async function listKeys() {
+      const r = await fetch(getBase() + "/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": getToken() },
+        body: JSON.stringify({ action: "list" })
+      });
+      const d = await r.json();
+      const tbody = document.getElementById("keyBody");
+      tbody.innerHTML = "";
+      const now = Math.floor(Date.now() / 1000);
+      for (const [k, v] of Object.entries(d.keys || {})) {
+        const expired = v.expires_at < now;
+        const exp = new Date(v.expires_at * 1000).toLocaleDateString("vi-VN");
+        tbody.innerHTML += `<tr>
+          <td>${k}</td>
+          <td class="${v.valid && !expired ? 'valid' : 'expired'}">${v.valid && !expired ? "✓" : "✗"}</td>
+          <td class="${expired ? 'expired' : ''}">${exp}</td>
+          <td>${v.note || "-"}</td>
+          <td><button onclick="deleteKey('${k}')">XÓA</button></td>
+        </tr>`;
+      }
+    }
+  </script>
 </body>
 </html>
